@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const items = [{ href: '/', label: '中观看板' }];
+const items = [
+  { href: '/', label: '中观看板' },
+  { href: '/docs', label: 'API 文档' },
+];
 
 export function Navbar() {
   const pathname = usePathname();
