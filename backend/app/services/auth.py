@@ -8,6 +8,8 @@ import os
 import secrets
 import sqlite3
 import tempfile
+import urllib.error
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,22 @@ def _auth_secret() -> bytes:
 
 def _database_url() -> str:
     return os.getenv("DATABASE_URL", "").strip()
+
+
+def _gist_token() -> str:
+    return os.getenv("GITHUB_GIST_AUTH_TOKEN", "").strip()
+
+
+def _gist_id() -> str:
+    return os.getenv("GITHUB_GIST_AUTH_ID", "").strip()
+
+
+def _gist_filename() -> str:
+    return os.getenv("GITHUB_GIST_AUTH_FILENAME", "users.json").strip() or "users.json"
+
+
+def _using_gist() -> bool:
+    return bool(_gist_token() and _gist_id())
 
 
 def _using_postgres() -> bool:
@@ -63,6 +81,47 @@ def _connect_postgres():
     return connect(_database_url(), row_factory=dict_row)
 
 
+def _gist_request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    url = f"https://api.github.com{path}"
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method=method)
+    request.add_header("Authorization", f"Bearer {_gist_token()}")
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    request.add_header("User-Agent", "ExceltoWeb")
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=500, detail=f"Gist storage error: {detail or exc.reason}") from exc
+
+
+def _gist_load_users() -> dict[str, Any]:
+    gist = _gist_request("GET", f"/gists/{_gist_id()}")
+    file_info = (gist.get("files") or {}).get(_gist_filename()) or {}
+    content = file_info.get("content") or "{}"
+    data = json.loads(content)
+    return data if isinstance(data, dict) else {}
+
+
+def _gist_save_users(users: dict[str, Any]) -> None:
+    _gist_request(
+        "PATCH",
+        f"/gists/{_gist_id()}",
+        {
+            "files": {
+                _gist_filename(): {
+                    "content": json.dumps(users, ensure_ascii=False, separators=(",", ":")),
+                }
+            }
+        },
+    )
+
+
 def _normalize_username(username: str) -> str:
     normalized = username.strip()
     if len(normalized) < 3 or len(normalized) > 64:
@@ -92,6 +151,10 @@ def _serialize_created_at(value: Any) -> str:
 
 
 def init_auth_storage() -> None:
+    if _using_gist():
+        _gist_load_users()
+        return
+
     if _using_postgres():
         with _connect_postgres() as conn:
             with conn.cursor() as cur:
@@ -158,6 +221,19 @@ def register_user(username: str, password: str) -> dict[str, Any]:
     password_hash = _hash_password(password, salt)
     created_at = _utcnow()
 
+    if _using_gist():
+        users = _gist_load_users()
+        if normalized in users:
+            raise HTTPException(status_code=409, detail="Username already exists.")
+        users[normalized] = {
+            "username": normalized,
+            "password_hash": password_hash,
+            "salt": salt,
+            "created_at": created_at.isoformat(),
+        }
+        _gist_save_users(users)
+        return {"username": normalized, "created_at": created_at.isoformat()}
+
     if _using_postgres():
         from psycopg import IntegrityError
 
@@ -199,7 +275,9 @@ def authenticate_user(username: str, password: str) -> dict[str, Any]:
     normalized = _normalize_username(username)
     _validate_password(password)
 
-    if _using_postgres():
+    if _using_gist():
+        row = (_gist_load_users()).get(normalized)
+    elif _using_postgres():
         with _connect_postgres() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -238,7 +316,9 @@ def verify_access_token(token: str) -> dict[str, Any]:
     if not isinstance(username, str) or not username:
         raise HTTPException(status_code=401, detail="Invalid access token.")
 
-    if _using_postgres():
+    if _using_gist():
+        row = (_gist_load_users()).get(username)
+    elif _using_postgres():
         with _connect_postgres() as conn:
             with conn.cursor() as cur:
                 cur.execute(
