@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://iran-trackerv3-api.vercel.app/api/$1"
+    }
+  ]
+}
