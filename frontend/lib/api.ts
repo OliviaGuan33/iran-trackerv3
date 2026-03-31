@@ -9,9 +9,14 @@ import {
   TrackingResponse,
 } from './types';
 
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || 'http://127.0.0.1:8000')
-  .trim()
-  .replace(/\/+$/, '');
+const configuredApiBase = (process.env.NEXT_PUBLIC_API_BASE || '').trim();
+
+export const API_BASE =
+  !configuredApiBase || configuredApiBase.toLowerCase() === 'same-origin'
+    ? typeof window === 'undefined'
+      ? ''
+      : window.location.origin
+    : configuredApiBase.replace(/\/+$/, '');
 
 type RequestOptions = RequestInit & {
   token?: string | null;
