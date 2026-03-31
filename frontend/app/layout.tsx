@@ -3,8 +3,8 @@ import { Navbar } from '../components/navbar';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: '伊朗局势跟踪',
-  description: '原油图谱、每日简报、海峡跟踪、实时更新'
+  title: 'ExceltoWeb',
+  description: 'ExceltoWeb：把 Excel 图表展示到网页端，并提供注册登录和受保护 API。',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

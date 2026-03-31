@@ -1,3 +1,3 @@
-from . import briefing, live, markets, overview, tracking
+from . import auth, briefing, database, live, markets, overview, tracking
 
-__all__ = ["briefing", "live", "markets", "overview", "tracking"]
+__all__ = ["auth", "briefing", "database", "live", "markets", "overview", "tracking"]

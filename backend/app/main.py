@@ -3,7 +3,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import briefing, live, markets, overview, tracking
+from app.routes import auth, briefing, database, live, markets, overview, tracking
+from app.services.auth import init_auth_storage
 
 
 def _cors_settings() -> tuple[list[str], bool]:
@@ -20,7 +21,7 @@ def _cors_settings() -> tuple[list[str], bool]:
 
 cors_origins, allow_credentials = _cors_settings()
 
-app = FastAPI(title="Iran Tracker API", version="0.2.0")
+app = FastAPI(title="ExceltoWeb API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +36,10 @@ app.include_router(markets.router, prefix="/api/markets", tags=["markets"])
 app.include_router(briefing.router, prefix="/api/briefing", tags=["briefing"])
 app.include_router(tracking.router, prefix="/api/tracking", tags=["tracking"])
 app.include_router(live.router, prefix="/api/live", tags=["live"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(database.router, prefix="/api/database", tags=["database"])
+
+init_auth_storage()
 
 
 @app.get("/health")
